@@ -1,27 +1,63 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ShieldAlert } from 'lucide-react';
 
-export default function UnauthorizedPage() {
+export const metadata: Metadata = { title: 'No access · Empiria Tour Partner' };
+export const dynamic = 'force-dynamic';
+
+type Reason = { title: string; body: string; action?: { href: string; label: string } };
+
+const REASONS: Record<string, Reason> = {
+  unconfigured: {
+    title: 'This dashboard is not connected',
+    body:
+      'The Supabase environment variables are missing, so there is no database to sign in against. Copy .env.local.example to .env.local and fill it in with the keys from the Tours project.',
+  },
+  staff: {
+    title: 'Empiria staff have their own console',
+    body:
+      'This dashboard shows one partner their own tours, scoped to them. An administrator has no partner account to scope on, so everything here would come back empty — which would look like a fault rather than a boundary.',
+  },
+};
+
+const DEFAULT: Reason = {
+  title: 'This account is not a partner',
+  body:
+    'Signing in worked, but this account has no partner access. If that is wrong, Empiria can change your role.',
+};
+
+export default async function UnauthorizedPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reason?: string }>;
+}) {
+  const { reason } = await searchParams;
+  const copy = (reason && REASONS[reason]) || DEFAULT;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
-          <ShieldAlert size={22} />
-        </div>
-        <h1 className="text-lg font-bold text-foreground">No partner access</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Your account isn&rsquo;t set up as a tour partner. If you think this is a mistake, contact
-          the Empiria Tour team.
-        </p>
-        <form action="/auth/signout" method="post" className="mt-6">
-          <button className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted">
+    <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-16">
+      <ShieldAlert size={28} className="text-primary" aria-hidden="true" />
+      <h1 className="mt-4 text-2xl font-bold tracking-tight text-foreground">{copy.title}</h1>
+      <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">{copy.body}</p>
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        {copy.action && (
+          <Link
+            href={copy.action.href}
+            className="rounded-lg bg-primary px-4 py-2 text-[13px] font-semibold text-primary-foreground transition-colors hover:opacity-90"
+          >
+            {copy.action.label}
+          </Link>
+        )}
+        <form action="/auth/signout" method="post">
+          <button
+            type="submit"
+            className="rounded-lg border border-border px-4 py-2 text-[13px] font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
+          >
             Sign out
           </button>
         </form>
-        <Link href="/dashboard" className="mt-3 inline-block text-sm text-muted-foreground hover:text-foreground">
-          Back to dashboard
-        </Link>
       </div>
-    </div>
+    </main>
   );
 }

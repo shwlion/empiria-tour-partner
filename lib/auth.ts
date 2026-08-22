@@ -2,25 +2,27 @@ import { redirect } from 'next/navigation';
 import { isSupabaseConfigured } from './supabase/config';
 import { createClient } from './supabase/server';
 
-export type Role = 'partner' | 'admin';
-
-export interface GuardResult {
-  /** The signed-in Supabase user, or null in design-shell (unconfigured) mode. */
-  user: { id: string; email: string | null } | null;
-  configured: boolean;
-}
-
 /**
- * Gate a dashboard tree by role, keyed on the Supabase auth UUID (`users.id`) —
- * the replacement for the shop's `auth0_id`.
+ * Who this app is for.
  *
- * DESIGN-SHELL BEHAVIOUR: when Supabase env vars are absent this is a
- * pass-through, so the sample dashboard renders with no backend. Once
- * configured it requires a signed-in user whose `users.role` equals `role`,
- * redirecting to /login (anonymous) or /unauthorized (wrong role).
+ * Exactly one role, deliberately. Exhibit A has no supplier-facing surface at
+ * all — Empiria is the seller of record for every booking — so this whole app
+ * exists because the client asked for partner self-service on top of the
+ * agreement. That makes its boundary the most important thing about it: a
+ * partner sees their own tours and nothing else, ever.
+ *
+ * Administrators are refused rather than admitted with an empty catalogue.
+ * Their `users` row has no `partner_id` to scope on, so every list here would
+ * come back empty and look like a bug. They have their own console.
  */
-export async function requireRole(role: Role): Promise<GuardResult> {
-  if (!isSupabaseConfigured()) return { user: null, configured: false };
+export type PartnerUser = {
+  id: string;
+  email: string | null;
+  name: string | null;
+};
+
+export async function requirePartner(): Promise<PartnerUser> {
+  if (!isSupabaseConfigured()) redirect('/unauthorized?reason=unconfigured');
 
   const supabase = await createClient();
   const {
@@ -30,11 +32,29 @@ export async function requireRole(role: Role): Promise<GuardResult> {
 
   const { data: profile } = await supabase
     .from('users')
-    .select('role')
+    .select('role, full_name')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
-  if (!profile || profile.role !== role) redirect('/unauthorized');
+  const role = profile?.role ?? 'traveller';
+  if (role !== 'partner') {
+    redirect(role === 'admin' || role === 'agent' ? '/unauthorized?reason=staff' : '/unauthorized');
+  }
 
-  return { user: { id: user.id, email: user.email ?? null }, configured: true };
+  return {
+    id: user.id,
+    email: user.email ?? null,
+    name: (profile as { full_name?: string | null } | null)?.full_name ?? null,
+  };
+}
+
+/**
+ * The partner's own id, for scoping.
+ *
+ * A separate call from `requirePartner()` only so the intent reads clearly at
+ * the call site: `listPackages(await partnerScope())` says what it does.
+ */
+export async function partnerScope(): Promise<string> {
+  const user = await requirePartner();
+  return user.id;
 }
