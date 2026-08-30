@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { CalendarRange, MapPinned, PlusCircle, TriangleAlert } from 'lucide-react';
+import { CalendarRange, MapPinned, PlusCircle, Ticket, TriangleAlert } from 'lucide-react';
 import { Button, Card, PageHeader } from '@/components/ui';
-import { formatDepartureDate } from '@/lib/money';
+import { formatDepartureDate, formatPrice } from '@/lib/money';
 import { requirePartner } from '@/lib/auth';
 import { listPackages } from '@/lib/console/packages';
 import { listUpcomingDepartures } from '@/lib/console/departures';
+import { listBookings } from '@/lib/console/bookings';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'Overview · Empiria Tour Partner' };
@@ -22,9 +23,10 @@ export const metadata: Metadata = { title: 'Overview · Empiria Tour Partner' };
  */
 export default async function OverviewPage() {
   const user = await requirePartner();
-  const [packages, departures] = await Promise.all([
+  const [packages, departures, bookings] = await Promise.all([
     listPackages(user.id),
     listUpcomingDepartures(user.id, 8),
+    listBookings(user.id, { limit: 8 }),
   ]);
 
   const live = packages.filter((p) => p.status === 'published');
@@ -66,7 +68,7 @@ export default async function OverviewPage() {
             <Stat label="Live" value={live.length} href="/dashboard/tours" icon={MapPinned} />
             <Stat label="In draft" value={drafts.length} href="/dashboard/tours" icon={MapPinned} />
             <Stat label="Upcoming dates" value={departures.length} href="/dashboard/departures" icon={CalendarRange} />
-            <Stat label="Seats sold" value={seatsSold} href="/dashboard/tours" icon={CalendarRange} />
+            <Stat label="Seats sold" value={seatsSold} href="/dashboard/bookings" icon={Ticket} />
           </div>
 
           {stranded.length > 0 && (
@@ -93,7 +95,7 @@ export default async function OverviewPage() {
           )}
 
           <div className="grid gap-5 lg:grid-cols-2">
-            <Card title="Going out next">
+            <Card title="Going out next" description="Open one to see who is coming.">
               {departures.length === 0 ? (
                 <p className="text-[13px] text-muted-foreground">No dates scheduled yet.</p>
               ) : (
@@ -102,7 +104,7 @@ export default async function OverviewPage() {
                     <li key={d.id} className="flex items-center justify-between gap-4 py-2.5">
                       <div className="min-w-0">
                         <Link
-                          href={`/dashboard/tours/${d.packageId}/departures`}
+                          href={`/dashboard/departures/${d.id}`}
                           className="block truncate text-[13px] font-medium text-foreground transition-colors hover:text-primary"
                         >
                           {d.packageTitle}
@@ -113,6 +115,35 @@ export default async function OverviewPage() {
                       </div>
                       <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
                         {d.seatsBooked}/{d.capacity} sold
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+
+            <Card title="Latest bookings">
+              {bookings.length === 0 ? (
+                <p className="text-[13px] leading-relaxed text-muted-foreground">
+                  Nothing booked yet. Bookings appear the moment Empiria takes one on your tours.
+                </p>
+              ) : (
+                <ul className="flex flex-col divide-y divide-border">
+                  {bookings.map((b) => (
+                    <li key={b.id} className="flex items-center justify-between gap-4 py-2.5">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/dashboard/bookings/${b.id}`}
+                          className="block truncate text-[13px] font-medium text-foreground transition-colors hover:text-primary"
+                        >
+                          {b.leadName}
+                        </Link>
+                        <span className="text-[12px] text-muted-foreground">
+                          {b.packageTitle} · {formatDepartureDate(b.departureStartsOn)}
+                        </span>
+                      </div>
+                      <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
+                        {formatPrice(b.totalCents, b.currency)}
                       </span>
                     </li>
                   ))}

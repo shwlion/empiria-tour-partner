@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, MapPinned, PlusCircle, CalendarRange, LogOut,
+  LayoutDashboard, MapPinned, PlusCircle, CalendarRange, Ticket, LogOut,
 } from 'lucide-react';
 
 /**
@@ -19,6 +19,7 @@ const ITEMS = [
   { name: 'My tours', href: '/dashboard/tours', icon: MapPinned },
   { name: 'New tour', href: '/dashboard/tours/new', icon: PlusCircle, exact: true },
   { name: 'Departures', href: '/dashboard/departures', icon: CalendarRange },
+  { name: 'Bookings', href: '/dashboard/bookings', icon: Ticket },
 ];
 
 export default function Sidebar({ name, email }: { name: string | null; email: string | null }) {

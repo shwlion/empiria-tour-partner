@@ -6,7 +6,10 @@
     "dev": "bun --bun next dev",
     "build": "bun --bun next build",
     "start": "bun --bun next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "audit:scope": "node scripts/audit-scope.mjs",
+    "test": "node --experimental-strip-types --no-warnings lib/console/manifest-csv.test.ts",
+    "check": "tsc --noEmit && eslint --max-warnings=0 && npm run audit:scope && npm test"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

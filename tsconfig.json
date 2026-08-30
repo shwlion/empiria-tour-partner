@@ -6,6 +6,10 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // The manifest CSV test runs under plain node (--experimental-strip-types),
+    // which requires the explicit .ts extension on its relative import. Safe
+    // alongside noEmit: nothing here is compiled to disk.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
