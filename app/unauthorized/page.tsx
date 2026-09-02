@@ -8,6 +8,11 @@ export const dynamic = 'force-dynamic';
 type Reason = { title: string; body: string; action?: { href: string; label: string } };
 
 const REASONS: Record<string, Reason> = {
+  closed: {
+    title: 'This account has been closed',
+    body:
+      'Empiria deactivated it, so it can no longer sign in. Your tours and bookings are untouched. If this was not expected, get in touch with Empiria and they can reopen it.',
+  },
   unconfigured: {
     title: 'This dashboard is not connected',
     body:

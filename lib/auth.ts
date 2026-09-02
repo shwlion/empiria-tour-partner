@@ -32,9 +32,16 @@ export async function requirePartner(): Promise<PartnerUser> {
 
   const { data: profile } = await supabase
     .from('users')
-    .select('role, full_name')
+    .select('role, full_name, status')
     .eq('id', user.id)
     .maybeSingle();
+
+  // A closed account keeps its role so it can be reopened, so status has to be
+  // checked on its own. Without this, deactivating a partner would leave them
+  // able to edit and publish tours Empiria sells.
+  if (profile?.status === 'closed') {
+    redirect('/unauthorized?reason=closed');
+  }
 
   const role = profile?.role ?? 'traveller';
   if (role !== 'partner') {
