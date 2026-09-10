@@ -37,8 +37,14 @@
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+// fileURLToPath, not .pathname: a file: URL percent-encodes, and this repo
+// lives under a directory whose name contains a space. `.pathname` hands back
+// "Empiria%20Tours" and every readdir under it fails, which the audit reports
+// as a crash rather than as a finding — a guard that cannot run is a guard
+// that is not there.
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const findings = [];
 
 function walk(dir, out = []) {
@@ -98,13 +104,39 @@ function functionsIn(source, { exportedOnly = true } = {}) {
 }
 
 /** The tables ownership hangs off. Everything else is reached through one. */
-const ROOTS = ['packages', 'departures', 'bookings'];
+const ROOTS = ['packages', 'departures', 'bookings', 'blog_posts'];
 const readsRoot = (body) =>
   ROOTS.some((t) => new RegExp(`\\.from\\(\\s*['"]${t}['"]\\s*\\)`).test(body));
+
+/**
+ * The columns a row's owner is named in. `packages` and everything hanging off
+ * it use `partner_id`; `blog_posts` uses `author_id`, because a post has an
+ * author rather than a supplier. One list, so adding a table with a third name
+ * is one edit here rather than a rule that quietly stops covering it.
+ */
+const OWNER = ['partner_id', 'author_id'];
+const ownerAlternation = OWNER.join('|');
+
 /** A partner filter applied to the query, or checked against the result. */
 const appliesScope = (body) =>
-  /\.eq\(\s*['"][\w.]*partner_id['"]\s*,\s*\w+\s*\)/.test(body) ||
-  /partner_id\s*!==\s*\w+/.test(body);
+  new RegExp(`\\.eq\\(\\s*['"][\\w.]*(${ownerAlternation})['"]\\s*,\\s*\\w+\\s*\\)`).test(body) ||
+  new RegExp(`(${ownerAlternation})\\s*!==\\s*\\w+`).test(body);
+
+/**
+ * A read that is global on purpose.
+ *
+ * Some reads genuinely span every partner: slug uniqueness, for one, because
+ * /blog/<slug> is a single namespace shared with Empiria and scoping it would
+ * mint two posts that fight over one URL. Those exist, so the audit needs a way
+ * to say so — but a bare allow-list of function names would let the next
+ * exemption in silently. The marker has to carry a reason, it has to sit in the
+ * body where a reviewer reading the function sees it, and it is greppable:
+ *
+ *   grep -rn 'audit-scope: global read' lib/
+ *
+ * tells you the complete set of places the boundary is deliberately not applied.
+ */
+const exempt = (body) => /audit-scope:\s*global read\s*[\u2014-]/.test(body);
 
 // ── Rule 1: reads of an ownership root are scoped ───────────────────────────
 for (const file of walk(join(ROOT, 'lib'))) {
@@ -113,10 +145,13 @@ for (const file of walk(join(ROOT, 'lib'))) {
   const source = readFileSync(file, 'utf8');
   for (const fn of functionsIn(source)) {
     if (!readsRoot(fn.body)) continue;
+    if (exempt(fn.body)) continue;
     if (!appliesScope(fn.body)) {
       findings.push(
-        `${rel}: ${fn.name}() reads packages/departures/bookings without applying a ` +
-          `partner filter. Protection by call order is not protection.`
+        `${rel}: ${fn.name}() reads ${ROOTS.join('/')} without applying an ` +
+          `owner filter (${OWNER.join(' or ')}). Protection by call order is not ` +
+          `protection. If the read is global on purpose, say so in the body with ` +
+          `"audit-scope: global read — <why>".`
       );
     }
   }
@@ -124,7 +159,17 @@ for (const file of walk(join(ROOT, 'lib'))) {
 
 // ── Rule 2: every server action reaches ownership before it writes ──────────
 const WRITE = /\.\s*(insert|update|upsert|delete)\s*\(/;
-const ownsInline = (body) => /partner_id\s*!==\s*user\.id/.test(body) || /partner_id:\s*user\.id/.test(body);
+/**
+ * Three shapes count as reaching ownership: comparing the owner column to the
+ * caller, stamping it on an insert, or pinning it in the query itself. The
+ * third is the strongest — it is in the WHERE clause of the write, so a row
+ * belonging to somebody else is not merely rejected afterwards, it is never
+ * matched — and it was the shape the audit used to miss.
+ */
+const ownsInline = (body) =>
+  new RegExp(`(${ownerAlternation})\\s*!==\\s*user\\.id`).test(body) ||
+  new RegExp(`(${ownerAlternation}):\\s*user\\.id`).test(body) ||
+  new RegExp(`\\.eq\\(\\s*['"](${ownerAlternation})['"]\\s*,\\s*user\\.id\\s*\\)`).test(body);
 
 for (const file of walk(join(ROOT, 'app'))) {
   if (!file.endsWith('actions.ts')) continue;

@@ -49,12 +49,20 @@ npm run audit:scope
 
 `scripts/audit-scope.mjs` enforces three rules:
 
-1. A read touching `packages` / `departures` / `bookings` applies a partner
-   filter somewhere in the same function. Child tables reached by a parent id
-   need none — getting the parent id already required a scoped read.
+1. A read touching `packages` / `departures` / `bookings` / `blog_posts`
+   applies an owner filter — `partner_id`, or `author_id` for posts — somewhere
+   in the same function. Child tables reached by a parent id need none —
+   getting the parent id already required a scoped read. A read that is global
+   on purpose says so in its body with `audit-scope: global read — <why>`;
+   `grep -rn 'audit-scope: global read' lib/` is the complete list of places the
+   boundary is deliberately not applied, and today it is one — `uniqueSlug`,
+   because `/blog/<slug>` is a namespace shared with Empiria.
 2. Every server action reaches ownership before it writes — an owner re-read, a
-   local helper that does one (recognised by reading its body, not its name), or
-   stamping `partner_id: user.id` on insert.
+   local helper that does one (recognised by reading its body, not its name),
+   stamping the owner column on insert, or pinning it in the query with
+   `.eq('author_id', user.id)`. The last is the strongest: it sits in the WHERE
+   clause of the write, so somebody else's row is never matched rather than
+   rejected afterwards.
 3. No route under `app/dashboard` renders without `requirePartner()`.
 
 It exists because auditing by hand found **two real holes**:
@@ -63,7 +71,15 @@ It exists because auditing by hand found **two real holes**:
 caller happened to check first, which is protection by call order. It has been
 negative-tested by reintroducing both plus an unguarded page; it caught all
 three. **Re-test it that way whenever a rule changes** — a check that never fails
-is worth nothing.
+is worth nothing. The current rules were re-tested against six reintroduced
+holes and caught all six.
+
+**It has already failed that way once.** `ROOT` came from `import.meta.url`
+via `.pathname`, which percent-encodes — so under a directory called
+`Empiria Tours` it resolved to `Empiria%20Tours`, every `readdir` threw, and
+`npm run check` reported a crash where it should have reported findings. It
+uses `fileURLToPath` now. A guard that cannot run is a guard that is not
+there, and this one could not run for as long as it has lived at this path.
 
 ## The types are narrower on purpose
 
