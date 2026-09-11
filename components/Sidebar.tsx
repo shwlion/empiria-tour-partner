@@ -37,7 +37,7 @@ export default function Sidebar({ name, email }: { name: string | null; email: s
   return (
     <>
       <div className="border-b border-gray-100 p-6">
-        <Image src="/logo.png" alt="Empiria Tour" width={140} height={36} className="h-9 w-auto" priority />
+        <Image src="/logo.png" alt="Empiria Tours" width={1507} height={522} className="h-9 w-auto" priority />
         <span className="mt-2 block text-[11px] font-semibold uppercase tracking-widest text-gray-400">
           Partner
         </span>

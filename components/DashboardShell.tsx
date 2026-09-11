@@ -66,7 +66,7 @@ export default function DashboardShell({
           >
             <Menu size={20} aria-hidden="true" />
           </button>
-          <Image src="/logo.png" alt="Empiria Tour" width={112} height={28} className="h-7 w-auto" priority />
+          <Image src="/logo.png" alt="Empiria Tours" width={1507} height={522} className="h-7 w-auto" priority />
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">{children}</main>
