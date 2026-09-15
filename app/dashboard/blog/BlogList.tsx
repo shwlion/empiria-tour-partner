@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Eye, EyeOff, Loader2, Pencil, Plus } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Badge, Banner, Button, Card, EmptyState, PageHeader } from '@/components/ui';
 import type { ActionResult } from '@/lib/actions';
 import type { PartnerBlogPost } from '@/lib/console/blog';
-import { publishPostAction, retirePostAction } from './actions';
+import { deletePostAction, publishPostAction, retirePostAction } from './actions';
 
 /**
  * A partner's own posts.
@@ -125,6 +125,24 @@ export default function BlogList({ posts }: { posts: PartnerBlogPost[] }) {
                       Publish
                     </Button>
                   )}
+
+                  <Button
+                    variant="danger"
+                    disabled={pending}
+                    onClick={() => {
+                      if (
+                        !confirm(
+                          `Delete “${post.title}” permanently?\n\nThis cannot be undone and removes the pictures uploaded with it. If you only want it off the site, take it back to a draft instead — that is reversible.`
+                        )
+                      ) {
+                        return;
+                      }
+                      run(() => deletePostAction(post.id));
+                    }}
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                    Delete
+                  </Button>
                 </div>
               </div>
             </Card>

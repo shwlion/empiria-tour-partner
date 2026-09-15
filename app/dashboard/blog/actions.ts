@@ -5,7 +5,7 @@ import { requirePartner } from '@/lib/auth';
 import { requireWritableDb } from '@/lib/supabase';
 import { recordAudit, diff } from '@/lib/audit';
 import { explain, fail, nullable, ok, text, type ActionResult } from '@/lib/actions';
-import { uniqueSlug } from '@/lib/blogSlug';
+import { uniqueSlug, blogObjectPathsIn } from '@/lib/blogSlug';
 import { validateBlogImage, blogObjectPath } from '@/lib/blogUpload';
 
 /**
@@ -183,6 +183,56 @@ export async function retirePostAction(id: string): Promise<ActionResult> {
     });
     revalidatePath(REVALIDATE);
     return ok(undefined, 'Back to a draft. It is off the site.');
+  } catch (error) {
+    return fail(explain(error));
+  }
+}
+
+/**
+ * A partner deleting their own post — permanent, pictures included.
+ *
+ * Their own only: `author_id` is pinned on the read and on the delete, as it
+ * is everywhere in this file. Nothing in the database would stop the service
+ * role deleting somebody else's, so this scope is the whole rule. An
+ * administrator can delete any post from the other console; a partner can
+ * delete only what they wrote, including a post Empiria has taken down —
+ * the takedown and its reason survive in audit_log, and so does the post's
+ * full content, on the delete row written below.
+ */
+export async function deletePostAction(id: string): Promise<ActionResult> {
+  const user = await requirePartner();
+  try {
+    const db = requireWritableDb();
+    const { data: before } = await db
+      .from('blog_posts')
+      .select('*')
+      .eq('id', id)
+      .eq('author_id', user.id)
+      .maybeSingle();
+    if (!before) return fail('That post no longer exists.');
+
+    const objects = blogObjectPathsIn(before.hero_image, before.body);
+
+    const { error } = await db.from('blog_posts').delete().eq('id', id).eq('author_id', user.id);
+    if (error) return fail(explain(error));
+
+    // After the row is gone. A storage failure must not leave the post
+    // standing — an orphaned object is a wasted byte, an undeleted post is the
+    // thing somebody asked to be removed.
+    if (objects.length) {
+      const { error: storageError } = await db.storage.from('blog').remove(objects);
+      if (storageError) console.error('[blog] objects left behind', objects, storageError);
+    }
+
+    await recordAudit(db, user, {
+      entity: 'blog_post',
+      entityId: id,
+      action: 'delete',
+      before,
+      summary: `Deleted “${before.title}” and ${objects.length} uploaded file${objects.length === 1 ? '' : 's'}`,
+    });
+    revalidatePath(REVALIDATE);
+    return ok(undefined, 'Deleted.');
   } catch (error) {
     return fail(explain(error));
   }
